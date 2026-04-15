@@ -1,0 +1,6 @@
+{
+  "name": "UdyamNX-Phone",
+  "description": "Professional Multi-tenant SaaS PWA VOIP Calling Solution with VOBIZ integration, Call Recording, and Google Contacts sync.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["VOIP", "SaaS", "PWA"]
+}

@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user in the system (Admin, Tenant, or Agent)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "tenant", "agent"] },
+        "tenantId": { "type": "string", "description": "The ID of the tenant this user belongs to. For tenants, this is their own ID." },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Tenant": {
+      "title": "Tenant",
+      "description": "Represents a tenant (company/organization)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "vobizNumberId": { "type": "string", "description": "Reference to the assigned VOBIZ number" },
+        "vobizConfig": {
+          "type": "object",
+          "properties": {
+            "authId": { "type": "string" },
+            "authSecret": { "type": "string" },
+            "username": { "type": "string" },
+            "password": { "type": "string" },
+            "sipUri": { "type": "string" },
+            "did": { "type": "string" }
+          }
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "callRecordingEnabled": { "type": "boolean" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name"]
+    },
+    "VobizNumber": {
+      "title": "VobizNumber",
+      "description": "Represents a VOBIZ credential/number pool",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "authId": { "type": "string" },
+        "authSecret": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "sipUri": { "type": "string" },
+        "did": { "type": "string" },
+        "assignedToTenantId": { "type": "string" }
+      },
+      "required": ["id", "authId", "authSecret", "username", "password", "sipUri", "did"]
+    },
+    "Call": {
+      "title": "Call",
+      "description": "Represents a call log entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "agentId": { "type": "string" },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "duration": { "type": "number" },
+        "recordingUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["completed", "missed", "failed", "active"] }
+      },
+      "required": ["id", "tenantId", "agentId", "from", "to", "startTime"]
+    },
+    "Contact": {
+      "title": "Contact",
+      "description": "Represents a contact",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "agentId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "googleId": { "type": "string" }
+      },
+      "required": ["id", "tenantId", "name", "phone"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/tenants/{tenantId}": {
+      "schema": "Tenant",
+      "description": "Tenant configurations"
+    },
+    "/vobiz_numbers/{numberId}": {
+      "schema": "VobizNumber",
+      "description": "VOBIZ credentials and numbers pool"
+    },
+    "/calls/{callId}": {
+      "schema": "Call",
+      "description": "Call logs"
+    },
+    "/contacts/{contactId}": {
+      "schema": "Contact",
+      "description": "Contacts"
+    }
+  }
+}

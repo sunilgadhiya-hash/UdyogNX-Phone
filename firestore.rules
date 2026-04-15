@@ -1,0 +1,177 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Fields:
+//   - uid: string (required)
+//   - email: string (required)
+//   - role: string (required, ['admin', 'tenant', 'agent'])
+//   - tenantId: string (optional)
+//   - displayName: string (optional)
+//   - photoURL: string (optional)
+//   - createdAt: timestamp (required)
+//
+// Collection: tenants
+// Fields:
+//   - id: string (required)
+//   - name: string (required)
+//   - vobizConfig: map (optional)
+//   - settings: map (optional)
+//   - createdAt: timestamp (required)
+//
+// Collection: calls
+// Fields:
+//   - id: string (required)
+//   - tenantId: string (required)
+//   - agentId: string (required)
+//   - from: string (required)
+//   - to: string (required)
+//   - startTime: timestamp (required)
+//   - endTime: timestamp (optional)
+//   - duration: number (optional)
+//   - recordingUrl: string (optional)
+//   - status: string (required)
+//
+// Collection: contacts
+// Fields:
+//   - id: string (required)
+//   - tenantId: string (required)
+//   - agentId: string (optional)
+//   - name: string (required)
+//   - phone: string (required)
+//   - email: string (optional)
+//   - googleId: string (optional)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+         (request.auth.token.email == "sunil.gadhiya@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isTenant() {
+      return isAuthenticated() && getUserData().role == 'tenant';
+    }
+
+    function isAgent() {
+      return isAuthenticated() && getUserData().role == 'agent';
+    }
+
+    function belongsToTenant(tenantId) {
+      return isAuthenticated() && getUserData().tenantId == tenantId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.role in ['admin', 'tenant', 'agent'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidTenant(data) {
+      return data.keys().hasAll(['id', 'name', 'createdAt']) &&
+             data.id is string &&
+             data.name is string &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidCall(data) {
+      return data.keys().hasAll(['id', 'tenantId', 'agentId', 'from', 'to', 'startTime', 'status']) &&
+             data.id is string &&
+             data.tenantId is string &&
+             data.agentId is string &&
+             data.from is string &&
+             data.to is string &&
+             data.startTime is timestamp &&
+             data.status is string;
+    }
+
+    function isValidContact(data) {
+      return data.keys().hasAll(['id', 'tenantId', 'name', 'phone']) &&
+             data.id is string &&
+             data.tenantId is string &&
+             data.name is string &&
+             data.phone is string;
+    }
+
+    function isValidVobizNumber(data) {
+      return data.keys().hasAll(['id', 'authId', 'authSecret', 'username', 'password', 'sipUri', 'did']) &&
+             data.id is string &&
+             data.authId is string &&
+             data.authSecret is string &&
+             data.username is string &&
+             data.password is string &&
+             data.sipUri is string &&
+             data.did is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /vobiz_numbers/{numberId} {
+      allow read: if isAuthenticated() && (isAdmin() || (isTenant() && resource.data.assignedToTenantId == getUserData().tenantId));
+      allow write: if isAdmin() && isValidVobizNumber(request.resource.data);
+    }
+
+    match /users/{uid} {
+      allow read: if isAuthenticated() && (isOwner(uid) || isAdmin() || (isTenant() && resource.data.tenantId == getUserData().tenantId));
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    ((isOwner(uid) && (request.resource.data.role == 'tenant' || (request.resource.data.role == 'admin' && request.auth.token.email == "sunil.gadhiya@gmail.com"))) || 
+                     isAdmin() || 
+                     (isTenant() && request.resource.data.tenantId == getUserData().tenantId && request.resource.data.role == 'agent'));
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    ((isOwner(uid) && request.resource.data.role == resource.data.role) || 
+                     isAdmin() || 
+                     (isTenant() && resource.data.tenantId == getUserData().tenantId && resource.data.role == 'agent'));
+      allow delete: if isAdmin();
+    }
+
+    match /tenants/{tenantId} {
+      allow read: if isAuthenticated() && (isAdmin() || belongsToTenant(tenantId));
+      allow create: if isAuthenticated() && isValidTenant(request.resource.data) && (isAdmin() || isOwner(request.resource.data.id));
+      allow update: if isAuthenticated() && isValidTenant(request.resource.data) && 
+                    (isAdmin() || 
+                     (isTenant() && belongsToTenant(tenantId) && 
+                      (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['vobizConfig', 'vobizNumberId']))));
+      allow delete: if isAdmin();
+    }
+
+    match /calls/{callId} {
+      allow read: if isAuthenticated() && (isAdmin() || belongsToTenant(resource.data.tenantId));
+      allow create: if isAuthenticated() && isValidCall(request.resource.data) && belongsToTenant(request.resource.data.tenantId);
+      allow update: if isAuthenticated() && isValidCall(request.resource.data) && belongsToTenant(resource.data.tenantId);
+      allow delete: if isAdmin();
+    }
+
+    match /contacts/{contactId} {
+      allow read: if isAuthenticated() && (isAdmin() || belongsToTenant(resource.data.tenantId));
+      allow create: if isAuthenticated() && isValidContact(request.resource.data) && belongsToTenant(request.resource.data.tenantId);
+      allow update: if isAuthenticated() && isValidContact(request.resource.data) && belongsToTenant(resource.data.tenantId);
+      allow delete: if isAuthenticated() && belongsToTenant(resource.data.tenantId);
+    }
+  }
+}
