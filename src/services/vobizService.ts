@@ -34,8 +34,8 @@ export class VobizService {
     host = host.split('/')[0];
     
     // 4. Construct the WebSocket URL
-    // We always want a clean wss://domain WebSocket URL, specifically on port 7443 for Vobiz
-    const wsUrl = `wss://${host}:7443`;
+    // Vobiz usually uses /ws path. We'll try the standard /ws first.
+    const wsUrl = `wss://${host}/ws`;
 
     // 5. Construct the SIP URI for registration
     const sipUri = `sip:${this.config.username}@${host}`;
@@ -51,6 +51,9 @@ export class VobizService {
       sockets: [socket],
       uri: sipUri,
       password: this.config.password,
+      authorization_user: this.config.username,
+      register: true,
+      session_timers: false
     };
 
     this.ua = new JsSIP.UA(configuration);
@@ -75,8 +78,8 @@ export class VobizService {
       console.log('Vobiz unregistered');
       this.onStatusChange?.('unregistered');
     });
-    this.ua.on('registrationFailed', () => {
-      console.log('Vobiz registration failed');
+    this.ua.on('registrationFailed', (e: any) => {
+      console.error('❌ Vobiz registration failed:', e.cause, e.response?.status_code);
       this.onStatusChange?.('failed');
     });
     this.ua.on('newRTCSession', (data) => {
@@ -109,6 +112,12 @@ export class VobizService {
 
   public call(target: string) {
     if (!this.ua || !this.domain) return;
+    
+    if (!this.ua.isRegistered()) {
+      console.error("❌ Cannot place call: Vobiz not registered");
+      return;
+    }
+
     const options = {
       mediaConstraints: { audio: true, video: false },
       pcConfig: {
